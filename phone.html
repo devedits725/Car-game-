@@ -45,7 +45,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
     <input id="urlInput" type="url" placeholder="https://dev_raheja--xxx.web.val.run" autocomplete="off" spellcheck="false">
   </div>
   <div id="statusMsg">PASTE THE SERVER URL ABOVE</div>
-  <button class="startBtn" id="connectBtn">▶ CONNECT &amp; ENABLE GYRO</button>
+  <button class="startBtn" id="connectBtn">▶ STEP 1 — CONNECT</button>
+  <button class="startBtn" id="gyroBtn" style="display:none;background:#00FF88;margin-top:4px;">▶ STEP 2 — ENABLE GYRO</button>
 </div>
 
 <div id="arcWrap">
@@ -156,31 +157,40 @@ document.getElementById('connectBtn').addEventListener('click', () => {
   const raw = document.getElementById('urlInput').value.trim().replace(/\/$/,'');
   if (!raw.startsWith('http')) { setStatus('✖ PASTE A VALID URL', 'err'); return; }
   const url = raw.endsWith('/steer') ? raw : raw + '/steer';
-
-  setStatus('TESTING...', '');
+  setStatus('CONNECTING...', '');
   fetch(url + '?t=' + Date.now())
     .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(data => {
       if (typeof data.steer === 'undefined') throw new Error('Wrong URL');
       serverUrl = url;
-      setStatus('✓ CONNECTED — TILT TO STEER', 'ok');
-      // Start sending at 30fps
       if (sendTimer) clearInterval(sendTimer);
-      sendTimer = setInterval(sendGyro, 20); // 50fps
+      sendTimer = setInterval(sendGyro, 20);
       document.getElementById('raceTag').style.display = 'block';
-      // Request gyro permission (must be inside tap handler for iOS)
-      if (typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function') {
-        DeviceOrientationEvent.requestPermission()
-          .then(s=>{ 
-            if(s==='granted'){ window.addEventListener('deviceorientation',onOrient); }
-            else { setStatus('⚠ GYRO PERMISSION DENIED — CHECK BROWSER SETTINGS','err'); }
-            document.getElementById('overlay').style.display = 'none';
-          })
-          .catch(e=>{ setStatus('✖ GYRO ERROR: '+e.message,'err'); });
+      // Check if iOS needs permission prompt
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        // iOS — show second button, gyro must be separate tap
+        setStatus('✓ CONNECTED — NOW TAP STEP 2', 'ok');
+        document.getElementById('connectBtn').style.display = 'none';
+        document.getElementById('gyroBtn').style.display = 'block';
       } else {
-        // Android / non-iOS — just add listener directly
-        window.addEventListener('deviceorientation',onOrient);
+        // Android — no permission needed, just start
+        window.addEventListener('deviceorientation', onOrient);
+        setStatus('✓ CONNECTED — TILT TO STEER', 'ok');
         document.getElementById('overlay').style.display = 'none';
+      }
+    })
+    .catch(e => setStatus('✖ ' + e.message, 'err'));
+});
+
+// Separate gyro button for iOS — MUST be a direct user tap with nothing async before it
+document.getElementById('gyroBtn').addEventListener('click', () => {
+  DeviceOrientationEvent.requestPermission()
+    .then(s => {
+      if (s === 'granted') {
+        window.addEventListener('deviceorientation', onOrient);
+        document.getElementById('overlay').style.display = 'none';
+      } else {
+        setStatus('⚠ GYRO DENIED — GO TO SETTINGS → SAFARI → MOTION & ORIENTATION ACCESS', 'err');
       }
     })
     .catch(e => setStatus('✖ ' + e.message, 'err'));
