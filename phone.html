@@ -45,14 +45,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 <div id="overlay">
   <h1>🏎<br>GYRO<br>RACER</h1>
   <div class="icard">
-    <label>JSONBIN BIN ID</label>
-    <input id="binInput" type="text" placeholder="64a3f7c4e3..." autocomplete="off" spellcheck="false">
+    <label>ABLY API KEY</label>
+    <input id="ablyKeyInput" type="text" placeholder="xxxxx.yyyyy:zzzzz..." autocomplete="off" spellcheck="false">
   </div>
-  <div class="icard">
-    <label>JSONBIN MASTER API KEY</label>
-    <input id="keyInput" type="text" placeholder="$2a$10$..." autocomplete="off" spellcheck="false">
-  </div>
-  <div id="statusMsg">ENTER JSONBIN DETAILS ABOVE</div>
+  <div id="statusMsg">ENTER YOUR ABLY API KEY ABOVE</div>
   <button class="startBtn" id="connectBtn">▶ STEP 1 — CONNECT</button>
   <button class="startBtn" id="gyroBtn" style="display:none;background:#00FF88;margin-top:4px;">▶ STEP 2 — ENABLE GYRO</button>
 </div>
@@ -103,28 +99,44 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
   <button class="panelBtn" onclick="document.getElementById('sensPanel').style.display='none'">✓ DONE</button>
 </div>
 
+<script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
 <script>
 const G = { axis:'gamma', invert:false, flip:false, sens:28, dz:4, base:null };
 let rawAlpha=0, rawBeta=0, rawGamma=0, gyroLive=false;
-let binId='', apiKey='';
+let ablyChannel = null;
 
-function setStatus(msg,cls){ const e=document.getElementById('statusMsg'); e.textContent=msg; e.className=cls||''; }
+function setStatus(msg, cls) {
+  const e = document.getElementById('statusMsg');
+  e.textContent = msg;
+  e.className = cls || '';
+}
 
-// ── SEND TO JSONBIN (MAX OPTIMIZED) ─────────────────────────────────────────
-// 1. Triggered directly from deviceorientation — zero timer delay.
-// 2. Throttled to 1 request per 80ms to avoid JSONBin rate limits.
-// 3. Smallest payload: steer + ts only.
-// 4. Pending send scheduled if tilt changes during throttle window.
-let lastSentSteer = null;
-let lastSendTime = 0;
-let sendPending = false;
+// ── GYRO ──────────────────────────────────────────────────────────────────────
+function getRaw() { return G.axis==='gamma' ? rawGamma : G.axis==='beta' ? rawBeta : rawAlpha; }
+
+function computeSteer() {
+  let raw=getRaw(), base=G.base!==null ? G.base : raw, delta=raw-base;
+  if (G.axis==='alpha') { if (delta>180) delta-=360; if (delta<-180) delta+=360; }
+  const dz=G.dz;
+  if (Math.abs(delta)<dz) delta=0; else delta-=Math.sign(delta)*dz;
+  let v = delta / Math.max(1, G.sens-dz);
+  v = Math.max(-1, Math.min(1, v));
+  if (G.invert) v=-v;
+  if (G.flip)   v=-v;
+  return v;
+}
+
+// ── SEND TO ABLY ──────────────────────────────────────────────────────────────
+let lastSendTime = 0, lastSentSteer = null, sendPending = false;
 
 function sendGyro() {
-  if (!binId) return;
+  if (!ablyChannel) return;
   const now = Date.now();
   const steer = parseFloat(computeSteer().toFixed(3));
-  if (lastSentSteer !== null && Math.abs(steer - lastSentSteer) < 0.005) return; // send on smaller changes
-  if (now - lastSendTime < 50) { // reduced from 80ms → 50ms
+  // Skip if steer hasn't changed meaningfully
+  if (lastSentSteer !== null && Math.abs(steer - lastSentSteer) < 0.005) return;
+  // Throttle to max 50ms between sends (~20 msg/sec — well within Ably's 50/sec limit)
+  if (now - lastSendTime < 50) {
     if (!sendPending) {
       sendPending = true;
       setTimeout(() => { sendPending = false; sendGyro(); }, 50 - (now - lastSendTime));
@@ -133,109 +145,128 @@ function sendGyro() {
   }
   lastSentSteer = steer;
   lastSendTime = now;
-  fetch('https://api.jsonbin.io/v3/b/' + binId, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-Master-Key': apiKey },
-    body: JSON.stringify({ steer, ts: now }),
-    keepalive: true
-  }).catch(() => {});
+  ablyChannel.publish('gyro', { steer }).catch(() => {});
 }
 
-// ── GYRO ──────────────────────────────────────────────────────────────────────
-function getRaw(){ return G.axis==='gamma'?rawGamma:G.axis==='beta'?rawBeta:rawAlpha; }
-function computeSteer(){
-  let raw=getRaw(), base=G.base!==null?G.base:raw, delta=raw-base;
-  if(G.axis==='alpha'){if(delta>180)delta-=360;if(delta<-180)delta+=360;}
-  const dz=G.dz;
-  if(Math.abs(delta)<dz)delta=0;else delta-=Math.sign(delta)*dz;
-  let v=delta/Math.max(1,G.sens-dz);v=Math.max(-1,Math.min(1,v));
-  if(G.invert)v=-v;if(G.flip)v=-v;
-  return v;
-}
-function onOrient(e){
-  rawAlpha=e.alpha||0;rawBeta=e.beta||0;rawGamma=e.gamma||0;
-  if(!gyroLive){gyroLive=true;if(G.base===null)G.base=getRaw();}
+function onOrient(e) {
+  rawAlpha=e.alpha||0; rawBeta=e.beta||0; rawGamma=e.gamma||0;
+  if (!gyroLive) { gyroLive=true; if (G.base===null) G.base=getRaw(); }
   updateUI();
-  sendGyro(); // send immediately on every gyro event (~60fps)
+  sendGyro();
 }
-function updateUI(){
-  const raw=getRaw(),steer=computeSteer(),deg=steer*88;
-  document.getElementById('needle').style.transform='rotate('+deg+'deg)';
-  const R=140,cx=150,cy=200,sa=-Math.PI/2,ea=sa+steer*Math.PI/2;
-  const x1=cx+R*Math.cos(sa),y1=cy+R*Math.sin(sa),x2=cx+R*Math.cos(ea),y2=cy+R*Math.sin(ea);
-  if(Math.abs(steer)<0.02){document.getElementById('arcFill').setAttribute('d','M '+x1+' '+y1);}
-  else{document.getElementById('arcFill').setAttribute('d','M '+x1+' '+y1+' A '+R+' '+R+' 0 0 '+(steer>0?1:0)+' '+x2+' '+y2);}
-  document.getElementById('arcFill').setAttribute('stroke',steer<0?'#FF6644':'#FFD700');
-  document.getElementById('steerTxt').textContent=raw.toFixed(0)+'°';
-  const pct=Math.round(Math.abs(steer)*100);
-  document.getElementById('steerPct').textContent=steer===0?'CENTER':((steer<0?'◀ ':'')+pct+'%'+(steer>0?' ▶':''));
-  document.getElementById('tiltVal').textContent=raw.toFixed(1)+'°';
-  document.getElementById('steerPctHud').textContent=(steer*100).toFixed(0)+'%';
+
+function updateUI() {
+  const raw=getRaw(), steer=computeSteer(), deg=steer*88;
+  document.getElementById('needle').style.transform = 'rotate('+deg+'deg)';
+  const R=140, cx=150, cy=200, sa=-Math.PI/2, ea=sa+steer*Math.PI/2;
+  const x1=cx+R*Math.cos(sa), y1=cy+R*Math.sin(sa);
+  const x2=cx+R*Math.cos(ea), y2=cy+R*Math.sin(ea);
+  const arcFill = document.getElementById('arcFill');
+  if (Math.abs(steer) < 0.02) {
+    arcFill.setAttribute('d', 'M '+x1+' '+y1);
+  } else {
+    arcFill.setAttribute('d', 'M '+x1+' '+y1+' A '+R+' '+R+' 0 0 '+(steer>0?1:0)+' '+x2+' '+y2);
+  }
+  arcFill.setAttribute('stroke', steer<0 ? '#FF6644' : '#FFD700');
+  document.getElementById('steerTxt').textContent = raw.toFixed(0)+'°';
+  const pct = Math.round(Math.abs(steer)*100);
+  document.getElementById('steerPct').textContent = steer===0 ? 'CENTER' : ((steer<0?'◀ ':'')+pct+'%'+(steer>0?' ▶':''));
+  document.getElementById('tiltVal').textContent = raw.toFixed(1)+'°';
+  document.getElementById('steerPctHud').textContent = (steer*100).toFixed(0)+'%';
 }
 
 // ── CONNECT ───────────────────────────────────────────────────────────────────
 document.getElementById('connectBtn').addEventListener('click', () => {
-  const bid = document.getElementById('binInput').value.trim();
-  const akey = document.getElementById('keyInput').value.trim();
-  if (!bid || !akey) { setStatus('✖ ENTER BOTH FIELDS', 'err'); return; }
+  const key = document.getElementById('ablyKeyInput').value.trim();
+  if (!key || !key.includes(':')) { setStatus('✖ ENTER A VALID ABLY KEY (contains a colon)', 'err'); return; }
   setStatus('CONNECTING...', '');
-  fetch('https://api.jsonbin.io/v3/b/' + bid + '/latest', { headers:{'X-Master-Key':akey} })
-    .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(() => {
-      binId=bid; apiKey=akey;
-      // sendGyro is now called directly from onOrient — no interval needed
-      document.getElementById('raceTag').style.display='block';
-      // iOS needs separate tap for gyro permission
-      if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
-        setStatus('✓ CONNECTED — TAP STEP 2', 'ok');
-        document.getElementById('connectBtn').style.display='none';
-        document.getElementById('gyroBtn').style.display='block';
-      } else {
-        window.addEventListener('deviceorientation', onOrient);
-        setStatus('✓ CONNECTED — TILT TO STEER', 'ok');
-        document.getElementById('overlay').style.display='none';
-      }
-    })
-    .catch(e => setStatus('✖ '+e.message, 'err'));
-});
 
-// iOS gyro — must be direct tap with no async before it
-document.getElementById('gyroBtn').addEventListener('click', () => {
-  DeviceOrientationEvent.requestPermission()
-    .then(s => {
-      if(s==='granted'){ window.addEventListener('deviceorientation',onOrient); document.getElementById('overlay').style.display='none'; }
-      else setStatus('⚠ GYRO DENIED — SETTINGS → SAFARI → MOTION ACCESS', 'err');
-    })
-    .catch(e => setStatus('✖ '+e.message, 'err'));
-});
+  const ably = new Ably.Realtime({ key, recover: true });
 
-// ── CONTROLS ─────────────────────────────────────────────────────────────────
-document.getElementById('flipBtn').addEventListener('click',()=>{
-  G.flip=!G.flip;const b=document.getElementById('flipBtn');
-  b.textContent=G.flip?'⇄ ON':'⇄ FLIP';b.style.color=G.flip?'#00FF88':'#FFD700';b.style.borderColor=G.flip?'#00FF88':'#FFD700';
-});
-document.getElementById('calBtn').addEventListener('click',()=>{
-  G.base=getRaw();const b=document.getElementById('calBtn'),o=b.textContent;b.textContent='✦ SET!';setTimeout(()=>b.textContent=o,900);
-});
-document.getElementById('settBtn').addEventListener('click',()=>{
-  const p=document.getElementById('sensPanel');p.style.display=p.style.display==='none'?'block':'none';
-  document.getElementById('axisPanel').style.display='none';
-});
-document.getElementById('axisBtn').addEventListener('click',()=>{
-  const p=document.getElementById('axisPanel');p.style.display=p.style.display==='none'?'block':'none';
-  document.getElementById('sensPanel').style.display='none';
-});
-document.getElementById('sensSlider').addEventListener('input',function(){G.sens=+this.value;document.getElementById('sensLbl').textContent=G.sens+'°';});
-document.querySelectorAll('.axOpt').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    G.axis=btn.dataset.axis;G.base=null;
-    document.querySelectorAll('.axOpt').forEach(b=>{b.className='axOpt';b.textContent=b.textContent.replace(' ✓','');});
-    btn.className='axOpt active';btn.textContent=btn.textContent+' ✓';
-    document.getElementById('axisPanel').style.display='none';
+  ably.connection.once('connected', () => {
+    ablyChannel = ably.channels.get('gyro-racer');
+    document.getElementById('raceTag').style.display = 'block';
+
+    // iOS requires a separate direct user tap to enable motion sensors
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      setStatus('✓ CONNECTED — TAP STEP 2 TO ENABLE GYRO', 'ok');
+      document.getElementById('connectBtn').style.display = 'none';
+      document.getElementById('gyroBtn').style.display = 'block';
+    } else {
+      // Android / desktop — gyro works without permission
+      window.addEventListener('deviceorientation', onOrient);
+      setStatus('✓ CONNECTED — TILT TO STEER', 'ok');
+      document.getElementById('overlay').style.display = 'none';
+    }
+  });
+
+  ably.connection.once('failed', () => {
+    setStatus('✖ CONNECTION FAILED — CHECK YOUR ABLY KEY', 'err');
   });
 });
 
-if('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
+// iOS gyro permission — MUST be triggered by a direct synchronous user tap
+document.getElementById('gyroBtn').addEventListener('click', () => {
+  DeviceOrientationEvent.requestPermission()
+    .then(state => {
+      if (state === 'granted') {
+        window.addEventListener('deviceorientation', onOrient);
+        document.getElementById('overlay').style.display = 'none';
+      } else {
+        setStatus('⚠ GYRO DENIED — SETTINGS → SAFARI → MOTION ACCESS', 'err');
+      }
+    })
+    .catch(err => setStatus('✖ ' + err.message, 'err'));
+});
+
+// ── CONTROLS ─────────────────────────────────────────────────────────────────
+document.getElementById('flipBtn').addEventListener('click', () => {
+  G.flip = !G.flip;
+  const b = document.getElementById('flipBtn');
+  b.textContent = G.flip ? '⇄ ON' : '⇄ FLIP';
+  b.style.color = G.flip ? '#00FF88' : '#FFD700';
+  b.style.borderColor = G.flip ? '#00FF88' : '#FFD700';
+});
+
+document.getElementById('calBtn').addEventListener('click', () => {
+  G.base = getRaw();
+  const b = document.getElementById('calBtn'), o = b.textContent;
+  b.textContent = '✦ SET!';
+  setTimeout(() => b.textContent = o, 900);
+});
+
+document.getElementById('settBtn').addEventListener('click', () => {
+  const p = document.getElementById('sensPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  document.getElementById('axisPanel').style.display = 'none';
+});
+
+document.getElementById('axisBtn').addEventListener('click', () => {
+  const p = document.getElementById('axisPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  document.getElementById('sensPanel').style.display = 'none';
+});
+
+document.getElementById('sensSlider').addEventListener('input', function() {
+  G.sens = +this.value;
+  document.getElementById('sensLbl').textContent = G.sens + '°';
+});
+
+document.querySelectorAll('.axOpt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    G.axis = btn.dataset.axis;
+    G.base = null;
+    document.querySelectorAll('.axOpt').forEach(b => {
+      b.className = 'axOpt';
+      b.textContent = b.textContent.replace(' ✓', '');
+    });
+    btn.className = 'axOpt active';
+    btn.textContent = btn.textContent + ' ✓';
+    document.getElementById('axisPanel').style.display = 'none';
+  });
+});
+
+if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(() => {});
 </script>
 </body>
 </html>
