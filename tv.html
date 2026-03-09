@@ -55,7 +55,7 @@ canvas { display:block; }
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-let SERVER_URL='',steerVal=0,phoneReady=false,pollTimer=null,missedPolls=0;
+let SERVER_URL='',steerVal=0,phoneReady=false,pollTimer=null,missedPolls=0,lastPhoneSeen=0;
 function setStatus(msg,cls){const e=document.getElementById('statusMsg');e.textContent=msg;e.className=cls;}
 function setPhone(on){
   phoneReady=on;
@@ -81,13 +81,17 @@ function startPolling(){
     try{
       const res=await fetch(SERVER_URL+'?t='+Date.now());
       const data=await res.json();
-      steerVal=data.steer||0;
-      missedPolls=0;
+      const newSteer = data.steer ?? 0;
+      // Track when we last got a non-zero steer OR any recent POST from phone
+      if (data.phoneOnline || newSteer !== 0) lastPhoneSeen = Date.now();
+      steerVal = newSteer;
+      missedPolls = 0;
       document.getElementById('gth').style.left=((steerVal+1)/2*100)+'%';
       document.getElementById('gyroHud').textContent=(steerVal*28).toFixed(0)+'°';
       document.getElementById('gyroHud').style.color='#00FF88';
-      if(!phoneReady&&data.phoneOnline)setPhone(true);
-      if(phoneReady&&!data.phoneOnline)setPhone(false);
+      const phoneNow = (Date.now() - lastPhoneSeen) < 4000;
+      if(!phoneReady && phoneNow) setPhone(true);
+      if(phoneReady && !phoneNow) setPhone(false);
     }catch(e){missedPolls++;if(missedPolls>5)setPhone(false);}
   },16); // ~60fps polling
 }
