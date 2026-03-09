@@ -2,220 +2,244 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>GYRO RACER — Controller</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GYRO RACER 3D — TV</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-html,body { height:100%; background:#0a0a0a; font-family:'Courier New',monospace; touch-action:none; user-select:none; overflow:hidden; }
-body { display:flex; flex-direction:column; align-items:center; }
-#arcWrap { flex:1; width:100%; display:flex; align-items:center; justify-content:center; }
-#arcSvg { width:min(88vw,320px); height:min(88vw,320px); }
-#statusBar { width:100%; padding:10px 16px; background:#111; border-top:2px solid #1a1a1a; display:flex; align-items:center; justify-content:space-between; }
-.sbit { font-size:9px; letter-spacing:2px; color:rgba(255,255,255,0.3); }
-.sbit span { color:#FFD700; font-size:14px; display:block; margin-top:2px; }
-#raceTag { display:none; font-size:9px; letter-spacing:3px; color:#00FF88; border:2px solid #00FF88; padding:4px 10px; }
-#controls { width:100%; padding:10px 16px 18px; background:#111; border-top:2px solid #1a1a1a; display:flex; gap:8px; justify-content:center; }
-.cb { background:rgba(255,255,255,0.05); color:#fff; border:2px solid rgba(255,255,255,0.18); font-family:'Courier New',monospace; font-size:11px; font-weight:bold; letter-spacing:1px; padding:10px 0; cursor:pointer; flex:1; max-width:130px; }
-.cb:active { opacity:.7; }
-.cb.y { border-color:#FFD700; color:#FFD700; }
-.cb.g { border-color:#00FF88; color:#00FF88; }
-#overlay { position:fixed; inset:0; background:#0a0a0a; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:50; gap:14px; padding:24px; text-align:center; overflow-y:auto; }
-#overlay h1 { color:#FFD700; font-size:clamp(22px,8vw,38px); font-weight:900; letter-spacing:5px; text-shadow:3px 3px 0 #000; line-height:1.2; margin-bottom:4px; }
-.icard { background:rgba(255,255,255,0.04); border:2px solid rgba(255,255,255,0.12); padding:12px 14px; width:100%; max-width:300px; text-align:left; }
-.icard label { color:rgba(255,255,255,0.4); font-size:9px; letter-spacing:3px; display:block; margin-bottom:7px; }
-.icard input { width:100%; background:rgba(0,0,0,0.6); border:2px solid rgba(255,255,255,0.18); color:#FFD700; font-family:'Courier New',monospace; font-size:12px; font-weight:bold; padding:9px 10px; outline:none; letter-spacing:1px; }
-.icard input:focus { border-color:#FFD700; }
-.icard input::placeholder { color:rgba(255,255,255,0.15); font-size:10px; font-weight:normal; }
-#statusMsg { font-size:10px; letter-spacing:2px; color:rgba(255,255,255,0.35); min-height:16px; padding:6px 14px; border:2px solid rgba(255,255,255,0.1); width:100%; max-width:300px; text-align:center; }
+body { background:#87CEEB; overflow:hidden; font-family:'Courier New',monospace; }
+canvas { display:block; }
+#hud { position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between; padding:10px 16px; pointer-events:none; z-index:10; }
+.hp { background:rgba(0,0,0,0.65); border:3px solid #fff; padding:6px 14px; color:#fff; font-size:11px; font-weight:bold; letter-spacing:1px; box-shadow:3px 3px 0 #000; }
+.hp .v { font-size:22px; color:#FFD700; display:block; text-shadow:2px 2px 0 #000; }
+#gbar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); width:260px; text-align:center; z-index:10; pointer-events:none; }
+#gbar .l { color:#fff; font-size:10px; font-weight:bold; letter-spacing:2px; text-shadow:1px 1px 0 #000; margin-bottom:4px; }
+#gt { height:12px; background:rgba(0,0,0,0.4); border:2px solid #fff; box-shadow:2px 2px 0 #000; position:relative; }
+#gth { position:absolute; top:-4px; width:10px; height:20px; background:#FFD700; border:2px solid #000; left:50%; transform:translateX(-50%); }
+#phoneBadge { position:fixed; top:14px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.85); border:3px solid #FF4400; color:#FF4400; font-size:11px; font-weight:bold; letter-spacing:2px; padding:6px 18px; z-index:20; box-shadow:3px 3px 0 #000; white-space:nowrap; }
+#phoneBadge.on { border-color:#00FF88; color:#00FF88; }
+#cf { position:fixed; inset:0; pointer-events:none; z-index:15; background:rgba(255,60,0,0); transition:background 0.06s; }
+#lapMsg { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); color:#FFD700; font-size:clamp(40px,10vw,100px); font-weight:900; letter-spacing:8px; text-shadow:6px 6px 0 #000; pointer-events:none; z-index:25; opacity:0; transition:opacity 0.15s; }
+#overlay { position:fixed; inset:0; background:rgba(0,0,0,0.92); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:30; gap:18px; padding:32px; text-align:center; }
+#overlay h1 { font-size:clamp(32px,7vw,72px); color:#FFD700; font-weight:900; letter-spacing:8px; text-shadow:5px 5px 0 #000; line-height:1.1; }
+#statusMsg { font-size:11px; letter-spacing:2px; color:rgba(255,255,255,0.35); border:2px solid rgba(255,255,255,0.1); padding:8px 20px; min-width:260px; text-align:center; }
 #statusMsg.ok  { color:#00FF88; border-color:#00FF88; }
 #statusMsg.err { color:#FF4400; border-color:#FF4400; }
-.startBtn { background:#FFD700; color:#000; font-family:'Courier New',monospace; font-weight:900; font-size:14px; letter-spacing:3px; border:4px solid #000; padding:14px 0; cursor:pointer; box-shadow:4px 4px 0 #000; width:100%; max-width:300px; }
-.startBtn:active { transform:translate(2px,2px); box-shadow:2px 2px 0 #000; }
-#sensPanel { display:none; position:fixed; bottom:76px; left:50%; transform:translateX(-50%); background:#111; border:2px solid #FFD700; padding:16px 20px; z-index:60; width:240px; text-align:center; }
-#axisPanel { display:none; position:fixed; bottom:76px; left:50%; transform:translateX(-50%); background:#111; border:2px solid #FFD700; padding:16px 20px; z-index:60; width:260px; text-align:center; }
-input[type=range] { -webkit-appearance:none; width:100%; height:8px; background:#222; border:2px solid #333; outline:none; margin:8px 0; }
-input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; background:#FFD700; border:3px solid #000; cursor:pointer; }
-.panelBtn { margin-top:10px; background:#FFD700; color:#000; font-family:'Courier New',monospace; font-weight:900; font-size:12px; letter-spacing:2px; border:3px solid #000; padding:8px 20px; cursor:pointer; }
-.axOpt { width:100%; background:rgba(255,255,255,0.05); border:2px solid #333; color:#aaa; font-family:'Courier New',monospace; font-size:12px; letter-spacing:2px; padding:10px; cursor:pointer; margin-bottom:6px; }
-.axOpt.active { background:rgba(255,215,0,0.15); border-color:#FFD700; color:#FFD700; }
+#waitMsg { color:#FFD700; font-size:12px; letter-spacing:3px; border:3px solid #FFD700; padding:10px 24px; display:none; }
+#waitMsg.ok { color:#00FF88; border-color:#00FF88; }
+.bb { background:#FFD700; color:#000; font-family:'Courier New',monospace; font-weight:900; font-size:15px; letter-spacing:3px; border:4px solid #000; padding:14px 36px; cursor:pointer; box-shadow:4px 4px 0 #000; display:none; }
+.bb:disabled { opacity:0.35; cursor:default; }
+#forceBtn { background:transparent; color:#aaa; border:2px solid #aaa; font-family:'Courier New',monospace; font-size:11px; letter-spacing:2px; padding:8px 20px; cursor:pointer; display:none; }
 </style>
 </head>
 <body>
-
+<div id="hud">
+  <div class="hp">SPD<span class="v" id="spd">0</span></div>
+  <div class="hp">PHONE<span class="v" id="gyroHud" style="color:#FF4400">--</span></div>
+  <div class="hp">LAP<span class="v" id="lp">0/3</span></div>
+</div>
+<div id="gbar"><div class="l">◀ STEER ▶</div><div id="gt"><div id="gth"></div></div></div>
+<div id="phoneBadge">📱 WAITING FOR PHONE...</div>
+<div id="cf"></div>
+<div id="lapMsg"></div>
 <div id="overlay">
-  <h1>🏎<br>GYRO<br>RACER</h1>
-  <div class="icard">
-    <label>JSONBIN BIN ID</label>
-    <input id="binInput" type="text" placeholder="64a3f7c4e3..." autocomplete="off" spellcheck="false">
-  </div>
-  <div class="icard">
-    <label>JSONBIN MASTER API KEY</label>
-    <input id="keyInput" type="text" placeholder="$2a$10$..." autocomplete="off" spellcheck="false">
-  </div>
-  <div id="statusMsg">ENTER JSONBIN DETAILS ABOVE</div>
-  <button class="startBtn" id="connectBtn">▶ STEP 1 — CONNECT</button>
-  <button class="startBtn" id="gyroBtn" style="display:none;background:#00FF88;margin-top:4px;">▶ STEP 2 — ENABLE GYRO</button>
+  <h1>GYRO<br>RACER 3D</h1>
+  <div id="statusMsg">CONNECTING...</div>
+  <div id="waitMsg">📱 OPEN PHONE PAGE TO CONNECT</div>
+  <button class="bb" id="startBtn" disabled>▶ START RACE</button>
+  <button id="forceBtn">📱 PHONE IS READY — FORCE CONNECT</button>
 </div>
 
-<div id="arcWrap">
-  <svg id="arcSvg" viewBox="0 0 300 300">
-    <path d="M 30 200 A 140 140 0 0 1 270 200" fill="none" stroke="#1a1a1a" stroke-width="30" stroke-linecap="round"/>
-    <path d="M 30 200 A 140 140 0 0 1 270 200" fill="none" stroke="#2a2a2a" stroke-width="18" stroke-linecap="round"/>
-    <path id="arcFill" d="M 150 60" fill="none" stroke="#FFD700" stroke-width="16" stroke-linecap="round" opacity="0.9"/>
-    <line x1="150" y1="62" x2="150" y2="90" stroke="#333" stroke-width="3"/>
-    <g id="needle" style="transform-origin:150px 200px;transition:transform 0.05s linear">
-      <line x1="150" y1="200" x2="150" y2="70" stroke="#FFD700" stroke-width="4" stroke-linecap="round"/>
-      <circle cx="150" cy="200" r="11" fill="#FFD700" stroke="#000" stroke-width="3"/>
-      <circle cx="150" cy="74" r="6" fill="#FFD700"/>
-    </g>
-    <text x="18" y="228" fill="#333" font-size="14" font-family="Courier New" font-weight="bold">◀</text>
-    <text x="268" y="228" fill="#333" font-size="14" font-family="Courier New" font-weight="bold">▶</text>
-    <text id="steerTxt" x="150" y="182" fill="#fff" font-size="24" font-weight="bold" font-family="Courier New" text-anchor="middle">0°</text>
-    <text id="steerPct" x="150" y="235" fill="#444" font-size="10" font-family="Courier New" text-anchor="middle">CENTER</text>
-  </svg>
-</div>
-
-<div id="statusBar">
-  <div class="sbit">TILT<span id="tiltVal">—</span></div>
-  <div id="raceTag">● LIVE</div>
-  <div class="sbit" style="text-align:right">STEER<span id="steerPctHud">—</span></div>
-</div>
-
-<div id="controls">
-  <button class="cb y" id="flipBtn">⇄ FLIP</button>
-  <button class="cb g" id="calBtn">✦ RECAL</button>
-  <button class="cb"   id="axisBtn">↻ AXIS</button>
-  <button class="cb"   id="settBtn">⚙ SENS</button>
-</div>
-
-<div id="axisPanel">
-  <div style="color:#FFD700;font-size:11px;letter-spacing:2px;margin-bottom:12px">TILT AXIS</div>
-  <button class="axOpt active" data-axis="gamma">GAMMA — left/right tilt ✓</button>
-  <button class="axOpt" data-axis="beta">BETA — forward/back tilt</button>
-  <button class="axOpt" data-axis="alpha">ALPHA — compass rotate</button>
-  <button class="panelBtn" onclick="document.getElementById('axisPanel').style.display='none'">✓ DONE</button>
-</div>
-
-<div id="sensPanel">
-  <div style="color:#FFD700;font-size:11px;letter-spacing:2px;margin-bottom:4px">SENSITIVITY</div>
-  <input type="range" id="sensSlider" min="8" max="60" value="28" step="2">
-  <div style="color:#FFD700;font-size:16px;font-weight:bold" id="sensLbl">28°</div>
-  <button class="panelBtn" onclick="document.getElementById('sensPanel').style.display='none'">✓ DONE</button>
-</div>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-const G = { axis:'gamma', invert:false, flip:false, sens:28, dz:4, base:null };
-let rawAlpha=0, rawBeta=0, rawGamma=0, gyroLive=false;
-let binId='', apiKey='', sendTimer=null;
+// ── REPLACE THESE TWO VALUES WITH YOUR JSONBIN CREDENTIALS ───────────────────
+// BIN_ID  : the ID from your JSONBin URL e.g. '69aecf84ae596e708f70d153'
+// API_KEY : your Master Key from JSONBin e.g. '$2b$10$xxxxxxxx'
+const BIN_ID  = '69aecf84ae596e708f70d153';
+const API_KEY = '$2a$10$0cIbnvYZbPoY/TRN.RN/b.FlmZXpF86WqsQiVlOhFkM77d5U0k9hm ';
+// ──────────────────────────────────────────────────────────────────────────────
 
-function setStatus(msg,cls){ const e=document.getElementById('statusMsg'); e.textContent=msg; e.className=cls||''; }
+const BIN_URL = 'https://api.jsonbin.io/v3/b/' + BIN_ID;
+let steerVal = 0, phoneReady = false, pollTimer = null, lastPhoneSeen = 0;
 
-// ── SEND TO JSONBIN ───────────────────────────────────────────────────────────
-function sendGyro() {
-  if (!binId) return;
-  const body = JSON.stringify({ steer:computeSteer(), gamma:rawGamma, beta:rawBeta, alpha:rawAlpha, ts:Date.now() });
-  fetch('https://api.jsonbin.io/v3/b/' + binId, {
-    method:'PUT',
-    headers:{ 'Content-Type':'application/json', 'X-Master-Key':apiKey },
-    body, keepalive:true
-  }).catch(()=>{});
+function setStatus(msg, cls) { const e = document.getElementById('statusMsg'); e.textContent = msg; e.className = cls || ''; }
+
+function setPhone(on) {
+  phoneReady = on;
+  const b = document.getElementById('phoneBadge'), w = document.getElementById('waitMsg'), s = document.getElementById('startBtn');
+  if (on) { b.textContent = '📱 PHONE CONNECTED ✓'; b.className = 'on'; w.textContent = '✓ PHONE READY — HIT START!'; w.className = 'ok'; s.disabled = false; }
+  else    { b.textContent = '📱 WAITING FOR PHONE...'; b.className = ''; w.textContent = '📱 OPEN PHONE PAGE TO CONNECT'; w.className = ''; s.disabled = true; }
 }
 
-// ── GYRO ──────────────────────────────────────────────────────────────────────
-function getRaw(){ return G.axis==='gamma'?rawGamma:G.axis==='beta'?rawBeta:rawAlpha; }
-function computeSteer(){
-  let raw=getRaw(), base=G.base!==null?G.base:raw, delta=raw-base;
-  if(G.axis==='alpha'){if(delta>180)delta-=360;if(delta<-180)delta+=360;}
-  const dz=G.dz;
-  if(Math.abs(delta)<dz)delta=0;else delta-=Math.sign(delta)*dz;
-  let v=delta/Math.max(1,G.sens-dz);v=Math.max(-1,Math.min(1,v));
-  if(G.invert)v=-v;if(G.flip)v=-v;
-  return v;
-}
-function onOrient(e){
-  rawAlpha=e.alpha||0;rawBeta=e.beta||0;rawGamma=e.gamma||0;
-  if(!gyroLive){gyroLive=true;if(G.base===null)G.base=getRaw();}
-  updateUI();
-}
-function updateUI(){
-  const raw=getRaw(),steer=computeSteer(),deg=steer*88;
-  document.getElementById('needle').style.transform='rotate('+deg+'deg)';
-  const R=140,cx=150,cy=200,sa=-Math.PI/2,ea=sa+steer*Math.PI/2;
-  const x1=cx+R*Math.cos(sa),y1=cy+R*Math.sin(sa),x2=cx+R*Math.cos(ea),y2=cy+R*Math.sin(ea);
-  if(Math.abs(steer)<0.02){document.getElementById('arcFill').setAttribute('d','M '+x1+' '+y1);}
-  else{document.getElementById('arcFill').setAttribute('d','M '+x1+' '+y1+' A '+R+' '+R+' 0 0 '+(steer>0?1:0)+' '+x2+' '+y2);}
-  document.getElementById('arcFill').setAttribute('stroke',steer<0?'#FF6644':'#FFD700');
-  document.getElementById('steerTxt').textContent=raw.toFixed(0)+'°';
-  const pct=Math.round(Math.abs(steer)*100);
-  document.getElementById('steerPct').textContent=steer===0?'CENTER':((steer<0?'◀ ':'')+pct+'%'+(steer>0?' ▶':''));
-  document.getElementById('tiltVal').textContent=raw.toFixed(1)+'°';
-  document.getElementById('steerPctHud').textContent=(steer*100).toFixed(0)+'%';
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(BIN_URL + '/latest?t=' + Date.now(), { headers: { 'X-Master-Key': API_KEY } });
+      const json = await res.json();
+      const data = json.record || {};
+      steerVal = data.steer || 0;
+      document.getElementById('gth').style.left = ((steerVal + 1) / 2 * 100) + '%';
+      document.getElementById('gyroHud').textContent = (steerVal * 28).toFixed(0) + '°';
+      document.getElementById('gyroHud').style.color = '#00FF88';
+      if (data.ts && (Date.now() - data.ts) < 5000) lastPhoneSeen = Date.now();
+      const phoneNow = (Date.now() - lastPhoneSeen) < 5000;
+      if (!phoneReady && phoneNow) setPhone(true);
+      if (phoneReady && !phoneNow) setPhone(false);
+    } catch(e) {}
+  }, 100);
 }
 
-// ── CONNECT ───────────────────────────────────────────────────────────────────
-document.getElementById('connectBtn').addEventListener('click', () => {
-  const bid = document.getElementById('binInput').value.trim();
-  const akey = document.getElementById('keyInput').value.trim();
-  if (!bid || !akey) { setStatus('✖ ENTER BOTH FIELDS', 'err'); return; }
-  setStatus('CONNECTING...', '');
-  fetch('https://api.jsonbin.io/v3/b/' + bid + '/latest', { headers:{'X-Master-Key':akey} })
-    .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(() => {
-      binId=bid; apiKey=akey;
-      if(sendTimer) clearInterval(sendTimer);
-      sendTimer = setInterval(sendGyro, 100);
-      document.getElementById('raceTag').style.display='block';
-      // iOS needs separate tap for gyro permission
-      if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
-        setStatus('✓ CONNECTED — TAP STEP 2', 'ok');
-        document.getElementById('connectBtn').style.display='none';
-        document.getElementById('gyroBtn').style.display='block';
-      } else {
-        window.addEventListener('deviceorientation', onOrient);
-        setStatus('✓ CONNECTED — TILT TO STEER', 'ok');
-        document.getElementById('overlay').style.display='none';
-      }
-    })
-    .catch(e => setStatus('✖ '+e.message, 'err'));
+window.addEventListener('load', async () => {
+  try {
+    const res = await fetch(BIN_URL + '/latest', { headers: { 'X-Master-Key': API_KEY } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    setStatus('✓ CONNECTED — OPEN PHONE PAGE', 'ok');
+    document.getElementById('waitMsg').style.display = 'block';
+    document.getElementById('startBtn').style.display = 'inline-block';
+    document.getElementById('forceBtn').style.display = 'inline-block';
+    startPolling();
+  } catch(e) {
+    setStatus('✖ FAILED — EDIT BIN_ID & API_KEY IN tv.html', 'err');
+  }
 });
 
-// iOS gyro — must be direct tap with no async before it
-document.getElementById('gyroBtn').addEventListener('click', () => {
-  DeviceOrientationEvent.requestPermission()
-    .then(s => {
-      if(s==='granted'){ window.addEventListener('deviceorientation',onOrient); document.getElementById('overlay').style.display='none'; }
-      else setStatus('⚠ GYRO DENIED — SETTINGS → SAFARI → MOTION ACCESS', 'err');
-    })
-    .catch(e => setStatus('✖ '+e.message, 'err'));
-});
+// event listeners moved below — see after resetCar() definition
 
-// ── CONTROLS ─────────────────────────────────────────────────────────────────
-document.getElementById('flipBtn').addEventListener('click',()=>{
-  G.flip=!G.flip;const b=document.getElementById('flipBtn');
-  b.textContent=G.flip?'⇄ ON':'⇄ FLIP';b.style.color=G.flip?'#00FF88':'#FFD700';b.style.borderColor=G.flip?'#00FF88':'#FFD700';
-});
-document.getElementById('calBtn').addEventListener('click',()=>{
-  G.base=getRaw();const b=document.getElementById('calBtn'),o=b.textContent;b.textContent='✦ SET!';setTimeout(()=>b.textContent=o,900);
-});
-document.getElementById('settBtn').addEventListener('click',()=>{
-  const p=document.getElementById('sensPanel');p.style.display=p.style.display==='none'?'block':'none';
-  document.getElementById('axisPanel').style.display='none';
-});
-document.getElementById('axisBtn').addEventListener('click',()=>{
-  const p=document.getElementById('axisPanel');p.style.display=p.style.display==='none'?'block':'none';
-  document.getElementById('sensPanel').style.display='none';
-});
-document.getElementById('sensSlider').addEventListener('input',function(){G.sens=+this.value;document.getElementById('sensLbl').textContent=G.sens+'°';});
-document.querySelectorAll('.axOpt').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    G.axis=btn.dataset.axis;G.base=null;
-    document.querySelectorAll('.axOpt').forEach(b=>{b.className='axOpt';b.textContent=b.textContent.replace(' ✓','');});
-    btn.className='axOpt active';btn.textContent=btn.textContent+' ✓';
-    document.getElementById('axisPanel').style.display='none';
-  });
-});
+// ── THREE.JS ──────────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight); renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x87CEEB); scene.fog = new THREE.Fog(0x87CEEB, 80, 220);
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, .1, 400);
+window.addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+const sun = new THREE.DirectionalLight(0xfffbe0, 1.4); sun.position.set(40, 80, 30); sun.castShadow = true; scene.add(sun);
+scene.add(new THREE.AmbientLight(0xaaccff, .75));
 
-if('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
+const N = 64, RW = 5.5, TP = [];
+for (let i = 0; i < N; i++) { const t = (i/N)*Math.PI*2; TP.push(new THREE.Vector3(Math.cos(t)*45+Math.sin(t*2)*4, 0, Math.sin(t)*30)); }
+function getAngle(i) { const p0=TP[i],p1=TP[(i+1)%N]; return Math.atan2(p1.x-p0.x, p1.z-p0.z); }
+const START_ANGLE = getAngle(0);
+
+function buildRoad() {
+  const pos=[],idx=[],nor=[]; let vi=0;
+  const push=(x,y,z,nx,ny,nz)=>{pos.push(x,y,z);nor.push(nx,ny,nz);return vi++;};
+  const TH=.45;
+  for (let i=0;i<N;i++) {
+    const p0=TP[i],p1=TP[(i+1)%N],f=new THREE.Vector3().subVectors(p1,p0).normalize(),r=new THREE.Vector3(-f.z,0,f.x);
+    const tl0=push(p0.x-r.x*RW,p0.y,p0.z-r.z*RW,0,1,0),tr0=push(p0.x+r.x*RW,p0.y,p0.z+r.z*RW,0,1,0);
+    const tl1=push(p1.x-r.x*RW,p1.y,p1.z-r.z*RW,0,1,0),tr1=push(p1.x+r.x*RW,p1.y,p1.z+r.z*RW,0,1,0);
+    idx.push(tl0,tr0,tl1,tr0,tr1,tl1);
+    const bl0=push(p0.x-r.x*RW,p0.y-TH,p0.z-r.z*RW,0,-1,0),br0=push(p0.x+r.x*RW,p0.y-TH,p0.z+r.z*RW,0,-1,0);
+    const bl1=push(p1.x-r.x*RW,p1.y-TH,p1.z-r.z*RW,0,-1,0),br1=push(p1.x+r.x*RW,p1.y-TH,p1.z+r.z*RW,0,-1,0);
+    idx.push(bl1,br0,bl0,bl1,br1,br0);
+    [[p0.x-r.x*RW,p0.z-r.z*RW,p1.x-r.x*RW,p1.z-r.z*RW,-r.x,-r.z,1],[p0.x+r.x*RW,p0.z+r.z*RW,p1.x+r.x*RW,p1.z+r.z*RW,r.x,r.z,-1]].forEach(([ax,az,bx,bz,nx,nz,fl])=>{
+      const s=vi;push(ax,p0.y,az,nx,0,nz);push(ax,p0.y-TH,az,nx,0,nz);push(bx,p1.y,bz,nx,0,nz);push(bx,p1.y-TH,bz,nx,0,nz);
+      if(fl<0)idx.push(s,s+1,s+2,s+1,s+3,s+2);else idx.push(s+2,s+1,s,s+2,s+3,s+1);
+    });
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));
+  geo.setIndex(idx);
+  const S=64,td=new Uint8Array(S*S*4);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){const c=((x>>3)^(y>>3))&1,v=c?82:58,i=(y*S+x)*4;td[i]=v;td[i+1]=v;td[i+2]=v;td[i+3]=255;}
+  const tex=new THREE.DataTexture(td,S,S,THREE.RGBAFormat);tex.needsUpdate=true;tex.magFilter=tex.minFilter=THREE.NearestFilter;
+  return new THREE.Mesh(geo,new THREE.MeshLambertMaterial({map:tex}));
+}
+
+function buildRails() {
+  const g=new THREE.Group(),mR=new THREE.MeshLambertMaterial({color:0xFF2222}),mW=new THREE.MeshLambertMaterial({color:0xEEEEEE}),mP=new THREE.MeshLambertMaterial({color:0x888888}),mB=new THREE.MeshLambertMaterial({color:0x555555});
+  for(let i=0;i<N;i++){
+    const p0=TP[i],p1=TP[(i+1)%N],fwd=new THREE.Vector3().subVectors(p1,p0),sl=fwd.length(),fd=fwd.clone().normalize(),rd=new THREE.Vector3(-fd.z,0,fd.x),mx=(p0.x+p1.x)*.5,mz=(p0.z+p1.z)*.5,ang=Math.atan2(fd.x,fd.z),ca=Math.floor(i/4)%2===0;
+    [-1,1].forEach(s=>{
+      const ox=rd.x*s*(RW+.55),oz=rd.z*s*(RW+.55);
+      const base=new THREE.Mesh(new THREE.BoxGeometry(.22,.12,sl+.05),mB);base.position.set(mx+ox,.04,mz+oz);base.rotation.y=ang;g.add(base);
+      const bm=new THREE.Mesh(new THREE.BoxGeometry(.08,.28,sl+.05),ca?mR:mW);bm.position.set(mx+ox+rd.x*s*.032,.54,mz+oz+rd.z*s*.032);bm.rotation.y=ang;g.add(bm);
+      const cp=new THREE.Mesh(new THREE.BoxGeometry(.1,.08,sl+.05),mP);cp.position.set(mx+ox,.81,mz+oz);cp.rotation.y=ang;g.add(cp);
+      if(i%4===0){const po=new THREE.Mesh(new THREE.BoxGeometry(.14,.85,.14),mP);po.position.set(p0.x+rd.x*s*(RW+.55),.425,p0.z+rd.z*s*(RW+.55));g.add(po);}
+    });
+  }
+  return g;
+}
+
+function mkCloud(x,y,z){const g=new THREE.Group(),mat=new THREE.MeshLambertMaterial({color:0xFFFFFF});[[2.6,1.4,2,0,0,0],[1.8,1.1,1.4,2.6,.4,0],[1.4,1,1.1,-2.1,.3,0]].forEach(([w,h,d,ox,oy,oz])=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(ox,oy,oz);g.add(m);});g.position.set(x,y,z);g.userData.spd=(Math.random()*.014+.003)*(Math.random()>.5?1:-1);return g;}
+
+function buildCar(){
+  const g=new THREE.Group(),bM=new THREE.MeshLambertMaterial({color:0xFF4400}),rM=new THREE.MeshLambertMaterial({color:0xCC3300}),wM=new THREE.MeshLambertMaterial({color:0x111111}),glM=new THREE.MeshLambertMaterial({color:0x88CCFF,transparent:true,opacity:.7}),hlM=new THREE.MeshLambertMaterial({color:0xFFFF88,emissive:0xFFFF00,emissiveIntensity:1}),tlM=new THREE.MeshLambertMaterial({color:0xFF2200,emissive:0xFF0000,emissiveIntensity:.8});
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1.6,.55,2.8),bM);body.position.y=.35;body.castShadow=true;g.add(body);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(1.3,.44,1.4),rM);roof.position.set(0,.84,-.12);g.add(roof);
+  const wind=new THREE.Mesh(new THREE.BoxGeometry(1.2,.38,.1),glM);wind.position.set(0,.80,.64);g.add(wind);
+  [[-.88,0,.9],[.88,0,.9],[-.88,0,-.9],[.88,0,-.9]].forEach(([x,y,z])=>{const w=new THREE.Mesh(new THREE.BoxGeometry(.36,.48,.48),wM);w.position.set(x,.24,z);g.add(w);});
+  [-.52,.52].forEach(x=>{const h=new THREE.Mesh(new THREE.BoxGeometry(.26,.17,.1),hlM);h.position.set(x,.37,1.45);g.add(h);const t=new THREE.Mesh(new THREE.BoxGeometry(.26,.17,.1),tlM);t.position.set(x,.37,-1.45);g.add(t);});
+  return g;
+}
+
+let car3d, clouds=[];
+function buildWorld(){
+  while(scene.children.length)scene.remove(scene.children[0]);
+  scene.add(sun);scene.add(new THREE.AmbientLight(0xaaccff,.75));
+  scene.add(buildRoad());scene.add(buildRails());
+  car3d=buildCar();scene.add(car3d);clouds=[];
+  [[-55,22,15],[45,26,-35],[5,20,55],[-38,18,-45],[62,24,8],[-14,30,-20],[32,19,42]].forEach(([x,y,z])=>{const c=mkCloud(x,y,z);scene.add(c);clouds.push(c);});
+  const hz=new THREE.Mesh(new THREE.PlaneGeometry(800,800),new THREE.MeshBasicMaterial({color:0xADD8E6,transparent:true,opacity:.2}));hz.rotation.x=-Math.PI/2;hz.position.y=-60;scene.add(hz);
+}
+
+let carPos=new THREE.Vector3(),carAngle=0,carSpeed=0,carVel=new THREE.Vector2(0,0);
+const MAX_SPD=.38,ACCEL=.018,FRICTION=.97,TURN=.048,RAIL_LIMIT=RW-.9,RAIL_BOUNCE=.38,MAX_LAPS=3;
+let lap=0,lastIdx=-1,running=false,cfTimer=0,raceFinished=false;
+
+function nearestTP(){let bi=0,bd=Infinity;TP.forEach((p,i)=>{const d=carPos.distanceTo(p);if(d<bd){bd=d;bi=i;}});return bi;}
+function trackFrame(i){const p0=TP[i],p1=TP[(i+1)%N],fwd=new THREE.Vector3().subVectors(p1,p0).normalize(),right=new THREE.Vector3(-fwd.z,0,fwd.x);return{right,lat:new THREE.Vector3().subVectors(carPos,p0).dot(right)};}
+
+function resetCar(){
+  const sp=TP[0];carPos.set(sp.x,.9,sp.z);carAngle=START_ANGLE;carSpeed=0;carVel.set(0,0);
+  lap=0;lastIdx=-1;raceFinished=false;document.getElementById('lp').textContent='0/'+MAX_LAPS;
+  camera.position.set(carPos.x-Math.sin(carAngle)*9,carPos.y+4.5,carPos.z-Math.cos(carAngle)*9);
+  camera.lookAt(carPos.x,carPos.y+1,carPos.z);
+}
+
+// ── Event listeners (placed here so resetCar is defined) ─────────────────────
+document.getElementById('startBtn').addEventListener('click', () => { resetCar(); document.getElementById('overlay').style.display = 'none'; running = true; });
+document.getElementById('forceBtn').addEventListener('click', () => setPhone(true));
+
+function showLap(msg){const el=document.getElementById('lapMsg');el.textContent=msg;el.style.opacity='1';setTimeout(()=>el.style.opacity='0',1800);}
+const keys={};window.addEventListener('keydown',e=>keys[e.key]=true);window.addEventListener('keyup',e=>keys[e.key]=false);
+
+function update(){
+  if(!running||raceFinished)return;
+  if(!phoneReady){if(keys['ArrowLeft']||keys['a'])steerVal=-1;else if(keys['ArrowRight']||keys['d'])steerVal=1;else steerVal*=.8;document.getElementById('gth').style.left=((steerVal+1)/2*100)+'%';}
+  const idx=nearestTP();
+  carSpeed+=(MAX_SPD-carSpeed)*ACCEL;carSpeed*=FRICTION;
+  carAngle+=steerVal*TURN*(carSpeed/MAX_SPD+.3);
+  const dx=Math.sin(carAngle)*carSpeed,dz=Math.cos(carAngle)*carSpeed;
+  carPos.x+=dx;carPos.z+=dz;carPos.y=.9;carVel.set(dx,dz);
+  const{lat,right:r}=trackFrame(idx);
+  if(Math.abs(lat)>RAIL_LIMIT){
+    const pen=Math.abs(lat)-RAIL_LIMIT,ps=lat>0?-1:1;
+    carPos.x+=r.x*ps*pen;carPos.z+=r.z*ps*pen;
+    const wnx=r.x*(lat>0?1:-1),wnz=r.z*(lat>0?1:-1),dot=carVel.x*wnx+carVel.y*wnz;
+    if(dot>0){carVel.x-=(1+RAIL_BOUNCE)*dot*wnx;carVel.y-=(1+RAIL_BOUNCE)*dot*wnz;const ns=Math.hypot(carVel.x,carVel.y);carSpeed=ns*RAIL_BOUNCE;if(ns>.001)carAngle=Math.atan2(carVel.x/ns,carVel.y/ns);}
+    else carSpeed*=RAIL_BOUNCE;
+    cfTimer=6;
+  }
+  if(lastIdx>N*.85&&idx<N*.1){lap++;document.getElementById('lp').textContent=lap+'/'+MAX_LAPS;if(lap>=MAX_LAPS){raceFinished=true;showLap('FINISH!');setTimeout(showFinish,2200);}else showLap('LAP '+lap+'!');}
+  lastIdx=idx;car3d.position.copy(carPos);car3d.rotation.y=carAngle;
+  camera.position.lerp(new THREE.Vector3(carPos.x-Math.sin(carAngle)*9,carPos.y+4.5,carPos.z-Math.cos(carAngle)*9),.12);
+  camera.lookAt(carPos.x,carPos.y+1,carPos.z);
+  document.getElementById('spd').textContent=Math.round(carSpeed*260);
+  const cf=document.getElementById('cf');if(cfTimer>0){cf.style.background='rgba(255,60,0,'+(cfTimer/14)+')';cfTimer--;}else cf.style.background='rgba(255,60,0,0)';
+  clouds.forEach(c=>c.position.x+=c.userData.spd);
+}
+
+function showFinish(){
+  const ov=document.getElementById('overlay');
+  ov.innerHTML='<h1>FINISH!</h1><div style="color:rgba(255,255,255,0.6);font-size:12px;letter-spacing:2px">RACE COMPLETE</div><button class="bb" id="again" style="display:inline-block;margin-top:16px">▶ RACE AGAIN</button>';
+  ov.style.display='flex';
+  document.getElementById('again').addEventListener('click',()=>{resetCar();ov.style.display='none';running=true;});
+}
+
+function loop(){requestAnimationFrame(loop);update();renderer.render(scene,camera);}
+buildWorld();resetCar();loop();
 </script>
 </body>
 </html>
