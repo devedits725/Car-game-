@@ -165,13 +165,7 @@ document.getElementById('connectBtn').addEventListener('click', () => {
       serverUrl = url;
       if (sendTimer) clearInterval(sendTimer);
       sendTimer = setInterval(sendGyro, 20);
-      // Heartbeat every 2s so TV knows phone is online (blob is slow, don't use for steer)
-      if ((window as any)._pingTimer) clearInterval((window as any)._pingTimer);
-      (window as any)._pingTimer = setInterval(() => {
-        fetch(serverUrl.replace('/steer', '/ping'), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ts: Date.now()}) }).catch(()=>{});
-      }, 2000);
-      // Send one immediately
-      fetch(serverUrl.replace('/steer', '/ping'), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ts: Date.now()}) }).catch(()=>{});
+
       document.getElementById('raceTag').style.display = 'block';
       // Check if iOS needs permission prompt
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
