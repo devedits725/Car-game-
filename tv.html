@@ -52,10 +52,10 @@ canvas { display:block; }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 // ── REPLACE THESE TWO VALUES WITH YOUR JSONBIN CREDENTIALS ───────────────────
-// BIN_ID  : the ID from your JSONBin URL e.g. '69aecf84ae596e708f70d153'
+// BIN_ID  : the ID from your JSONBin URL e.g. '64abc123def456'
 // API_KEY : your Master Key from JSONBin e.g. '$2b$10$xxxxxxxx'
-const BIN_ID  = '69aecf84ae596e708f70d153';
-const API_KEY = '$2a$10$0cIbnvYZbPoY/TRN.RN/b.FlmZXpF86WqsQiVlOhFkM77d5U0k9hm ';
+const BIN_ID  = 'PASTE_BIN_ID_HERE';
+const API_KEY = 'PASTE_API_KEY_HERE';
 // ──────────────────────────────────────────────────────────────────────────────
 
 const BIN_URL = 'https://api.jsonbin.io/v3/b/' + BIN_ID;
@@ -70,23 +70,66 @@ function setPhone(on) {
   else    { b.textContent = '📱 WAITING FOR PHONE...'; b.className = ''; w.textContent = '📱 OPEN PHONE PAGE TO CONNECT'; w.className = ''; s.disabled = true; }
 }
 
+// ── MAXIMUM SPEED POLLING ────────────────────────────────────────────────────
+// 1. Race 4 parallel requests — first to respond wins, others aborted instantly
+// 2. Next race fires immediately after winner returns (zero idle gap)
+// 3. 4 parallel loops offset by 100ms — a request is always in-flight
+// 4. Discard out-of-order / stale packets via timestamp
+// 5. Predict steer between packets at 60fps for smooth gameplay
+const pollHeaders = { 'X-Master-Key': API_KEY };
+let lastAppliedTs = 0, lastSteer = 0, lastSteerTime = 0, steerVelocity = 0;
+
+function applyData(data) {
+  if (!data.ts) return;
+  if (data.ts <= lastAppliedTs) return; // discard out-of-order
+  lastAppliedTs = data.ts;
+  const age = Date.now() - data.ts;
+  if (age > 2000) return; // discard packets older than 2s
+  const incoming = data.steer || 0;
+  const dt = data.ts - lastSteerTime;
+  if (dt > 0 && dt < 500) steerVelocity = (incoming - lastSteer) / dt;
+  lastSteer = incoming; lastSteerTime = data.ts;
+  steerVal = incoming;
+  document.getElementById('gth').style.left = ((steerVal + 1) / 2 * 100) + '%';
+  document.getElementById('gyroHud').textContent = (steerVal * 28).toFixed(0) + '°';
+  document.getElementById('gyroHud').style.color = age < 400 ? '#00FF88' : '#FFD700';
+  if (age < 5000) lastPhoneSeen = Date.now();
+  const phoneNow = (Date.now() - lastPhoneSeen) < 5000;
+  if (!phoneReady && phoneNow) setPhone(true);
+  if (phoneReady && !phoneNow) setPhone(false);
+}
+
+function predictSteer() {
+  if (!lastSteerTime) return;
+  const elapsed = Date.now() - lastSteerTime;
+  if (elapsed < 300) {
+    const predicted = Math.max(-1, Math.min(1, lastSteer + steerVelocity * elapsed));
+    steerVal = steerVal + (predicted - steerVal) * 0.3;
+  }
+}
+
+async function fetchOnce() {
+  const ctrls = [0,1,2,3].map(() => new AbortController());
+  const abort = () => ctrls.forEach(c => { try { c.abort(); } catch(_){} });
+  const makeReq = (ctrl) =>
+    fetch(BIN_URL + '/latest?_=' + Date.now(), {
+      headers: pollHeaders, signal: ctrl.signal, cache: 'no-store'
+    })
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(j => { abort(); return j; });
+  try {
+    const json = await Promise.any(ctrls.map(makeReq));
+    applyData(json.record || {});
+  } catch(_) {}
+}
+
 function startPolling() {
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(async () => {
-    try {
-      const res = await fetch(BIN_URL + '/latest?t=' + Date.now(), { headers: { 'X-Master-Key': API_KEY } });
-      const json = await res.json();
-      const data = json.record || {};
-      steerVal = data.steer || 0;
-      document.getElementById('gth').style.left = ((steerVal + 1) / 2 * 100) + '%';
-      document.getElementById('gyroHud').textContent = (steerVal * 28).toFixed(0) + '°';
-      document.getElementById('gyroHud').style.color = '#00FF88';
-      if (data.ts && (Date.now() - data.ts) < 5000) lastPhoneSeen = Date.now();
-      const phoneNow = (Date.now() - lastPhoneSeen) < 5000;
-      if (!phoneReady && phoneNow) setPhone(true);
-      if (phoneReady && !phoneNow) setPhone(false);
-    } catch(e) {}
-  }, 100);
+  async function loop(delayMs) {
+    await new Promise(r => setTimeout(r, delayMs));
+    while (true) { await fetchOnce(); }
+  }
+  loop(0); loop(100); loop(200); loop(300); // 4 loops always in-flight
+  setInterval(predictSteer, 16); // 60fps steer prediction between packets
 }
 
 window.addEventListener('load', async () => {
