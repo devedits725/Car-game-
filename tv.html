@@ -52,6 +52,7 @@ canvas { display:block; }
   <div id="statusMsg">CONNECTING...</div>
   <div id="waitMsg">📱 OPEN PHONE PAGE TO CONNECT</div>
   <button class="bb" id="startBtn" disabled>▶ START RACE</button>
+  <button class="bb" id="forceBtn" style="background:transparent;color:#aaa;border-color:#aaa;font-size:11px;padding:8px 20px;margin-top:-8px;">📱 PHONE IS READY — FORCE CONNECT</button>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -97,6 +98,7 @@ function startPolling(){
 }
 window.addEventListener('load',()=>testAndConnect('https://dev_raheja--3c2704c01b9c11f1837042dde27851f2.web.val.run/steer'));
 document.getElementById('startBtn').addEventListener('click',()=>{resetCar();document.getElementById('overlay').style.display='none';running=true;});
+document.getElementById('forceBtn').addEventListener('click',()=>{ setPhone(true); });
 
 // THREE.JS
 const renderer=new THREE.WebGLRenderer({antialias:true});
