@@ -40,7 +40,11 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 
 <div id="overlay">
   <h1>🏎<br>GYRO<br>RACER</h1>
-  <div id="statusMsg">TAP TO CONNECT</div>
+  <div class="icard">
+    <label>PASTE VAL.TOWN URL</label>
+    <input id="urlInput" type="url" placeholder="https://dev_raheja--xxx.web.val.run" autocomplete="off" spellcheck="false">
+  </div>
+  <div id="statusMsg">PASTE THE SERVER URL ABOVE</div>
   <button class="startBtn" id="connectBtn">▶ CONNECT &amp; ENABLE GYRO</button>
 </div>
 
@@ -71,9 +75,19 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 <div id="controls">
   <button class="cb y" id="flipBtn">⇄ FLIP</button>
   <button class="cb g" id="calBtn">✦ RECAL</button>
+  <button class="cb"   id="axisBtn">↻ AXIS</button>
   <button class="cb"   id="settBtn">⚙ SENS</button>
 </div>
 
+<div id="axisPanel" style="display:none;position:fixed;bottom:76px;left:50%;transform:translateX(-50%);background:#111;border:2px solid #FFD700;padding:16px 20px;z-index:60;width:260px;text-align:center;">
+  <div style="color:#FFD700;font-size:11px;letter-spacing:2px;margin-bottom:12px">TILT AXIS</div>
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    <button class="axOpt" data-axis="gamma" style="background:rgba(255,215,0,0.15);border:2px solid #FFD700;color:#FFD700;font-family:'Courier New',monospace;font-size:12px;letter-spacing:2px;padding:10px;cursor:pointer;">GAMMA (left/right tilt) ✓</button>
+    <button class="axOpt" data-axis="beta"  style="background:rgba(255,255,255,0.05);border:2px solid #333;color:#aaa;font-family:'Courier New',monospace;font-size:12px;letter-spacing:2px;padding:10px;cursor:pointer;">BETA (forward/back tilt)</button>
+    <button class="axOpt" data-axis="alpha" style="background:rgba(255,255,255,0.05);border:2px solid #333;color:#aaa;font-family:'Courier New',monospace;font-size:12px;letter-spacing:2px;padding:10px;cursor:pointer;">ALPHA (compass rotate)</button>
+  </div>
+  <button onclick="document.getElementById('axisPanel').style.display='none'" style="margin-top:12px;background:#FFD700;color:#000;font-family:'Courier New',monospace;font-weight:900;font-size:12px;letter-spacing:2px;border:3px solid #000;padding:8px 20px;cursor:pointer;">✓ DONE</button>
+</div>
 <div id="sensPanel">
   <div style="color:#FFD700;font-size:11px;letter-spacing:2px;margin-bottom:4px">SENSITIVITY</div>
   <input type="range" id="sensSlider" min="8" max="60" value="28" step="2">
@@ -92,12 +106,13 @@ function setStatus(msg,cls){ const e=document.getElementById('statusMsg'); e.tex
 // ── SEND GYRO ─────────────────────────────────────────────────────────────────
 function sendGyro() {
   if (!serverUrl) return;
-  // Fire and forget — don't await, don't block gyro updates
-  fetch(serverUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ steer: computeSteer(), gamma: rawGamma, beta: rawBeta, alpha: rawAlpha })
-  }).catch(() => {}); // ignore errors silently
+  const body = JSON.stringify({ steer: computeSteer(), gamma: rawGamma, beta: rawBeta, alpha: rawAlpha });
+  // sendBeacon is fire-and-forget with minimal overhead — fastest option
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon(serverUrl, new Blob([body], { type: 'application/json' }));
+  } else {
+    fetch(serverUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body, keepalive:true }).catch(()=>{});
+  }
 }
 
 // ── GYRO ──────────────────────────────────────────────────────────────────────
@@ -138,7 +153,9 @@ function requestGyro() {
 
 // ── CONNECT ───────────────────────────────────────────────────────────────────
 document.getElementById('connectBtn').addEventListener('click', () => {
-  const url = 'https://dev_raheja--3c2704c01b9c11f1837042dde27851f2.web.val.run/steer';
+  const raw = document.getElementById('urlInput').value.trim().replace(/\/$/,'');
+  if (!raw.startsWith('http')) { setStatus('✖ PASTE A VALID URL', 'err'); return; }
+  const url = raw.endsWith('/steer') ? raw : raw + '/steer';
 
   setStatus('TESTING...', '');
   fetch(url + '?t=' + Date.now())
@@ -149,11 +166,22 @@ document.getElementById('connectBtn').addEventListener('click', () => {
       setStatus('✓ CONNECTED — TILT TO STEER', 'ok');
       // Start sending at 30fps
       if (sendTimer) clearInterval(sendTimer);
-      sendTimer = setInterval(sendGyro, 33);
+      sendTimer = setInterval(sendGyro, 20); // 50fps
       document.getElementById('raceTag').style.display = 'block';
-      document.getElementById('overlay').style.display = 'none';
-      // Request gyro inside the tap handler (required for iOS)
-      requestGyro();
+      // Request gyro permission (must be inside tap handler for iOS)
+      if (typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function') {
+        DeviceOrientationEvent.requestPermission()
+          .then(s=>{ 
+            if(s==='granted'){ window.addEventListener('deviceorientation',onOrient); }
+            else { setStatus('⚠ GYRO PERMISSION DENIED — CHECK BROWSER SETTINGS','err'); }
+            document.getElementById('overlay').style.display = 'none';
+          })
+          .catch(e=>{ setStatus('✖ GYRO ERROR: '+e.message,'err'); });
+      } else {
+        // Android / non-iOS — just add listener directly
+        window.addEventListener('deviceorientation',onOrient);
+        document.getElementById('overlay').style.display = 'none';
+      }
     })
     .catch(e => setStatus('✖ ' + e.message, 'err'));
 });
@@ -170,6 +198,18 @@ document.getElementById('settBtn').addEventListener('click',()=>{
   const p=document.getElementById('sensPanel'); p.style.display=p.style.display==='none'?'block':'none';
 });
 document.getElementById('sensSlider').addEventListener('input',function(){ G.sens=+this.value; document.getElementById('sensLbl').textContent=G.sens+'°'; });
+document.getElementById('axisBtn').addEventListener('click',()=>{
+  const p=document.getElementById('axisPanel'); p.style.display=p.style.display==='none'?'block':'none';
+});
+document.querySelectorAll('.axOpt').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    G.axis=btn.dataset.axis; G.base=null;
+    document.querySelectorAll('.axOpt').forEach(b=>{ b.style.background='rgba(255,255,255,0.05)'; b.style.borderColor='#333'; b.style.color='#aaa'; b.textContent=b.textContent.replace(' ✓',''); });
+    btn.style.background='rgba(255,215,0,0.15)'; btn.style.borderColor='#FFD700'; btn.style.color='#FFD700';
+    btn.textContent=btn.textContent+' ✓';
+    document.getElementById('axisPanel').style.display='none';
+  });
+});
 
 if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
 </script>
