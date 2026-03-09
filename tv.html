@@ -86,10 +86,10 @@ function startPolling(){
       document.getElementById('gth').style.left=((steerVal+1)/2*100)+'%';
       document.getElementById('gyroHud').textContent=(steerVal*28).toFixed(0)+'°';
       document.getElementById('gyroHud').style.color='#00FF88';
-      if(!phoneReady&&data.phoneActive)setPhone(true);
-      if(phoneReady&&!data.phoneActive)setPhone(false);
+      if(!phoneReady&&data.phoneOnline)setPhone(true);
+      if(phoneReady&&!data.phoneOnline)setPhone(false);
     }catch(e){missedPolls++;if(missedPolls>5)setPhone(false);}
-  },50);
+  },16); // ~60fps polling
 }
 window.addEventListener('load',()=>testAndConnect('https://dev_raheja--3c2704c01b9c11f1837042dde27851f2.web.val.run/steer'));
 document.getElementById('startBtn').addEventListener('click',()=>{resetCar();document.getElementById('overlay').style.display='none';running=true;});
