@@ -40,11 +40,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 
 <div id="overlay">
   <h1>🏎<br>GYRO<br>RACER</h1>
-  <div class="icard">
-    <label>PASTE YOUR VAL.TOWN URL</label>
-    <input id="urlInput" type="url" placeholder="https://yourname.val.run/steer" autocomplete="off" spellcheck="false">
-  </div>
-  <div id="statusMsg">ENTER THE SAME URL AS THE TV</div>
+  <div id="statusMsg">TAP TO CONNECT</div>
   <button class="startBtn" id="connectBtn">▶ CONNECT &amp; ENABLE GYRO</button>
 </div>
 
@@ -142,9 +138,7 @@ function requestGyro() {
 
 // ── CONNECT ───────────────────────────────────────────────────────────────────
 document.getElementById('connectBtn').addEventListener('click', () => {
-  const raw = document.getElementById('urlInput').value.trim().replace(/\/$/,'');
-  if (!raw.startsWith('http')) { setStatus('✖ PASTE A VALID URL', 'err'); return; }
-  const url = (raw.endsWith('/steer') ? raw : raw + '/steer');
+  const url = 'https://dev_raheja--3c2704c01b9c11f1837042dde27851f2.web.val.run/steer';
 
   setStatus('TESTING...', '');
   fetch(url + '?t=' + Date.now())
