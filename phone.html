@@ -44,11 +44,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 
 <div id="overlay">
   <h1>🏎<br>GYRO<br>RACER</h1>
-  <div class="icard">
-    <label>ABLY API KEY</label>
-    <input id="ablyKeyInput" type="text" placeholder="xxxxx.yyyyy:zzzzz..." autocomplete="off" spellcheck="false">
-  </div>
-  <div id="statusMsg">ENTER YOUR ABLY API KEY ABOVE</div>
+  <div id="statusMsg">TAP BELOW TO CONNECT</div>
   <button class="startBtn" id="connectBtn">▶ STEP 1 — CONNECT</button>
   <button class="startBtn" id="gyroBtn" style="display:none;background:#00FF88;margin-top:4px;">▶ STEP 2 — ENABLE GYRO</button>
 </div>
@@ -101,6 +97,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 
 <script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
 <script>
+// ── SAME KEY AS tv.html ─────────────────────────────────────────────────────
+const ABLY_KEY = 'oX0XeQ.sjBNJg:ZtKSngsx8d55cN_Vt7wV7pQoNV_BJ21udjCm7l0yVLw';
+// ─────────────────────────────────────────────────────────────────────────────
 const G = { axis:'gamma', invert:false, flip:false, sens:28, dz:4, base:null };
 let rawAlpha=0, rawBeta=0, rawGamma=0, gyroLive=false;
 let ablyChannel = null;
@@ -177,8 +176,8 @@ function updateUI() {
 
 // ── CONNECT ───────────────────────────────────────────────────────────────────
 document.getElementById('connectBtn').addEventListener('click', () => {
-  const key = document.getElementById('ablyKeyInput').value.trim();
-  if (!key || !key.includes(':')) { setStatus('✖ ENTER A VALID ABLY KEY (contains a colon)', 'err'); return; }
+  const key = ABLY_KEY;
+  if (!key || !key.includes(':')) { setStatus('✖ ABLY_KEY is invalid — check phone.html', 'err'); return; }
   setStatus('CONNECTING...', '');
 
   const ably = new Ably.Realtime({ key, recover: true });
