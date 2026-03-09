@@ -106,19 +106,39 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 <script>
 const G = { axis:'gamma', invert:false, flip:false, sens:28, dz:4, base:null };
 let rawAlpha=0, rawBeta=0, rawGamma=0, gyroLive=false;
-let binId='', apiKey='', sendTimer=null;
+let binId='', apiKey='';
 
 function setStatus(msg,cls){ const e=document.getElementById('statusMsg'); e.textContent=msg; e.className=cls||''; }
 
-// ── SEND TO JSONBIN ───────────────────────────────────────────────────────────
+// ── SEND TO JSONBIN (MAX OPTIMIZED) ─────────────────────────────────────────
+// 1. Triggered directly from deviceorientation — zero timer delay.
+// 2. Throttled to 1 request per 80ms to avoid JSONBin rate limits.
+// 3. Smallest payload: steer + ts only.
+// 4. Pending send scheduled if tilt changes during throttle window.
+let lastSentSteer = null;
+let lastSendTime = 0;
+let sendPending = false;
+
 function sendGyro() {
   if (!binId) return;
-  const body = JSON.stringify({ steer:computeSteer(), gamma:rawGamma, beta:rawBeta, alpha:rawAlpha, ts:Date.now() });
+  const now = Date.now();
+  const steer = parseFloat(computeSteer().toFixed(3));
+  if (lastSentSteer !== null && Math.abs(steer - lastSentSteer) < 0.005) return; // send on smaller changes
+  if (now - lastSendTime < 50) { // reduced from 80ms → 50ms
+    if (!sendPending) {
+      sendPending = true;
+      setTimeout(() => { sendPending = false; sendGyro(); }, 50 - (now - lastSendTime));
+    }
+    return;
+  }
+  lastSentSteer = steer;
+  lastSendTime = now;
   fetch('https://api.jsonbin.io/v3/b/' + binId, {
-    method:'PUT',
-    headers:{ 'Content-Type':'application/json', 'X-Master-Key':apiKey },
-    body, keepalive:true
-  }).catch(()=>{});
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Master-Key': apiKey },
+    body: JSON.stringify({ steer, ts: now }),
+    keepalive: true
+  }).catch(() => {});
 }
 
 // ── GYRO ──────────────────────────────────────────────────────────────────────
@@ -136,6 +156,7 @@ function onOrient(e){
   rawAlpha=e.alpha||0;rawBeta=e.beta||0;rawGamma=e.gamma||0;
   if(!gyroLive){gyroLive=true;if(G.base===null)G.base=getRaw();}
   updateUI();
+  sendGyro(); // send immediately on every gyro event (~60fps)
 }
 function updateUI(){
   const raw=getRaw(),steer=computeSteer(),deg=steer*88;
@@ -162,8 +183,7 @@ document.getElementById('connectBtn').addEventListener('click', () => {
     .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(() => {
       binId=bid; apiKey=akey;
-      if(sendTimer) clearInterval(sendTimer);
-      sendTimer = setInterval(sendGyro, 100);
+      // sendGyro is now called directly from onOrient — no interval needed
       document.getElementById('raceTag').style.display='block';
       // iOS needs separate tap for gyro permission
       if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
