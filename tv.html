@@ -17,6 +17,8 @@ canvas { display:block; }
 #gth { position:absolute; top:-4px; width:10px; height:20px; background:#FFD700; border:2px solid #000; left:50%; transform:translateX(-50%); }
 #phoneBadge { position:fixed; top:14px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.85); border:3px solid #FF4400; color:#FF4400; font-size:11px; font-weight:bold; letter-spacing:2px; padding:6px 18px; z-index:20; box-shadow:3px 3px 0 #000; white-space:nowrap; }
 #phoneBadge.on { border-color:#00FF88; color:#00FF88; }
+#padBadge { position:fixed; top:44px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.85); border:3px solid #555; color:#555; font-size:11px; font-weight:bold; letter-spacing:2px; padding:6px 18px; z-index:20; box-shadow:3px 3px 0 #000; white-space:nowrap; }
+#padBadge.on { border-color:#00FF88; color:#00FF88; }
 #cf { position:fixed; inset:0; pointer-events:none; z-index:15; background:rgba(255,60,0,0); transition:background 0.06s; }
 #lapMsg { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); color:#FFD700; font-size:clamp(40px,10vw,100px); font-weight:900; letter-spacing:8px; text-shadow:6px 6px 0 #000; pointer-events:none; z-index:25; opacity:0; transition:opacity 0.15s; }
 #overlay { position:fixed; inset:0; background:rgba(0,0,0,0.92); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:30; gap:18px; padding:32px; text-align:center; }
@@ -39,6 +41,7 @@ canvas { display:block; }
 </div>
 <div id="gbar"><div class="l">◀ STEER ▶</div><div id="gt"><div id="gth"></div></div></div>
 <div id="phoneBadge">📱 WAITING FOR PHONE...</div>
+<div id="padBadge">🎮 NO CONTROLLER</div>
 <div id="cf"></div>
 <div id="lapMsg"></div>
 <div id="overlay">
@@ -55,7 +58,7 @@ canvas { display:block; }
 // ── REPLACE THIS WITH YOUR ABLY API KEY ───────────────────────────────────────
 // 1. Sign up free at https://ably.com
 // 2. Create an App → go to API Keys → copy the Root key (contains ':')
-const ABLY_KEY = 'oX0XeQ.sjBNJg:ZtKSngsx8d55cN_Vt7wV7pQoNV_BJ21udjCm7l0yVLw';
+const ABLY_KEY = 'PASTE_ABLY_API_KEY_HERE';
 // ──────────────────────────────────────────────────────────────────────────────
 
 const CHANNEL_NAME = 'gyro-racer';
@@ -303,16 +306,87 @@ const keys={};
 window.addEventListener('keydown', e => keys[e.key]=true);
 window.addEventListener('keyup',   e => keys[e.key]=false);
 
+// ── DS4 GAMEPAD (DualShock 4) ─────────────────────────────────────────────────
+// Axes:    axes[0] = Left stick X (-1 left, +1 right)
+// Buttons: buttons[6]  = L2 (brake),  buttons[7]  = R2 (accelerate)
+//          buttons[0]  = Cross (×)  — start race from overlay
+// Priority: gamepad > phone gyro > keyboard
+let padConnected = false;
+
+window.addEventListener('gamepadconnected', (e) => {
+  padConnected = true;
+  const pb = document.getElementById('padBadge');
+  pb.textContent = '🎮 ' + (e.gamepad.id.includes('Wireless') || e.gamepad.id.includes('DUALSHOCK') ? 'DS4' : 'PAD') + ' CONNECTED ✓';
+  pb.className = 'on';
+  // Allow starting the race with Cross button even before it's running
+  if (!running) {
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('startBtn').style.display = 'inline-block';
+  }
+});
+
+window.addEventListener('gamepaddisconnected', () => {
+  padConnected = false;
+  const pb = document.getElementById('padBadge');
+  pb.textContent = '🎮 NO CONTROLLER';
+  pb.className = '';
+});
+
+function readGamepad() {
+  // Returns { accel, brake } from DS4 triggers, or null if no controller
+  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (let i = 0; i < gamepads.length; i++) {
+    const gp = gamepads[i];
+    if (!gp) continue;
+
+    // Cross (×) = index 0 — start race from overlay
+    if (gp.buttons[0] && gp.buttons[0].pressed && !running && !raceFinished) {
+      const ov = document.getElementById('overlay');
+      if (ov.style.display !== 'none') { resetCar(); ov.style.display = 'none'; running = true; }
+    }
+
+    if (!running || raceFinished) return null;
+
+    // R2 = accelerate, L2 = brake (both analog 0.0–1.0)
+    const accel = gp.buttons[7] ? gp.buttons[7].value : 0;
+    const brake = gp.buttons[6] ? gp.buttons[6].value : 0;
+    return { accel, brake };
+  }
+  return null;
+}
+
 function update() {
   if (!running || raceFinished) return;
-  if (!phoneReady) {
+
+  // Poll gamepad every frame (Web Gamepad API requires polling)
+  const gpInput = readGamepad();
+
+  const idx = nearestTP();
+
+  // ── SPEED CONTROL ─────────────────────────────────────────────────────────
+  if (gpInput) {
+    // DS4 triggers: R2 = gas, L2 = brake — phone gyro handles steering
+    const targetSpd = MAX_SPD * gpInput.accel;
+    carSpeed += (targetSpd - carSpeed) * 0.12; // smooth analog acceleration
+    carSpeed -= gpInput.brake * 0.04;           // analog brake force
+    carSpeed = Math.max(0, carSpeed);
+  } else {
+    // No controller — auto accelerate (gyro steers, speed is automatic)
+    carSpeed += (MAX_SPD - carSpeed) * ACCEL; carSpeed *= FRICTION;
+  }
+
+  // ── STEERING: phone gyro always controls steer ────────────────────────────
+  // (steerVal is set by Ably gyro subscription above)
+  // Keyboard fallback if no phone connected and no controller
+  if (!phoneReady && !gpInput) {
     if (keys['ArrowLeft'] || keys['a']) steerVal = -1;
     else if (keys['ArrowRight'] || keys['d']) steerVal = 1;
     else steerVal *= .8;
+    if (keys['ArrowUp'] || keys['w']) { carSpeed += (MAX_SPD - carSpeed) * ACCEL; }
     document.getElementById('gth').style.left = ((steerVal+1)/2*100) + '%';
   }
-  const idx = nearestTP();
-  carSpeed += (MAX_SPD - carSpeed) * ACCEL; carSpeed *= FRICTION;
+
+  // Speed control is handled per-branch above
   carAngle += steerVal * TURN * (carSpeed/MAX_SPD + .3);
   const dx=Math.sin(carAngle)*carSpeed, dz=Math.cos(carAngle)*carSpeed;
   carPos.x+=dx; carPos.z+=dz; carPos.y=.9; carVel.set(dx,dz);
