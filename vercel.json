@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/phone", "destination": "/phone.html" },
-    { "source": "/", "destination": "/tv.html" }
+    { "source": "/", "destination": "/tv.html" },
+    { "source": "/phone", "destination": "/phone.html" }
   ]
 }
